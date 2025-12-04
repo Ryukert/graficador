@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <title>Monitor de Sensores – Tiempo Real</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Luxon + Adapter para eje de tiempo de Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -129,17 +132,6 @@
       font-size: 0.8rem;
       color: var(--text-soft);
       font-weight: 400;
-    }
-
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      background: var(--accent-soft);
-      color: var(--accent);
     }
 
     .sensor-toggle-group {
@@ -414,7 +406,6 @@
     // ================= ESTADO DE SESIÓN =================
     let sessionStartTime = null;
     let totalPointsThisSession = 0;
-
     let lastFetchTime = null;
 
     // ================= REFERENCIAS DOM =================
@@ -585,7 +576,7 @@
     const chartMpu2 = createSensorChart(ctxMpu2, "MPU9250 #2");
     const chartLsm = createSensorChart(ctxLsm, "LSM6DSOX");
 
-    // Ocultar/mostrar por checkbox (ocultamos el card completo)
+    // Ocultar/mostrar por checkbox (card completo)
     function handleCheckboxVisibility() {
       cardMpu1.classList.toggle("hidden", !chkMpu1.checked);
       cardMpu2.classList.toggle("hidden", !chkMpu2.checked);
@@ -601,6 +592,7 @@
     async function fetchSensorData() {
       try {
         updateStatus("connecting");
+        console.log("Consultando:", SENSOR_URL);
         const response = await fetch(SENSOR_URL, { cache: "no-store" });
 
         if (!response.ok) {
@@ -608,27 +600,29 @@
         }
 
         const json = await response.json() || {};
+        console.log("Respuesta Firebase:", json);
         updateStatus("ok");
 
         const now = new Date();
         lastFetchTime = now;
         lastUpdateLabel.textContent = "Última actualización: " + formatTime(now);
 
-        // Transformar en arreglo y ordenar por timestamp si existe
         const entries = Object.entries(json);
+        if (entries.length === 0) {
+          console.log("No hay nodos en /sensor_data");
+        }
+
         const dataArray = entries.map(([key, value]) => ({
           key,
           ...value
         }));
 
-        // ordenar por timestamp si existe, sino por key
         dataArray.sort((a, b) => {
           const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
           const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
           if (ta && tb && !isNaN(ta) && !isNaN(tb)) {
             return ta - tb;
           }
-          // fallback
           if (a.key < b.key) return -1;
           if (a.key > b.key) return 1;
           return 0;
@@ -636,8 +630,8 @@
 
         const limit = 500;
         const slice = dataArray.slice(-limit);
+        console.log("Puntos totales usados:", slice.length);
 
-        // Agrupar por sensor_type
         const mpu1 = [];
         const mpu2 = [];
         const lsm = [];
@@ -660,15 +654,15 @@
           }
         });
 
-        // Actualizar gráficas
+        console.log("mpu1:", mpu1.length, "mpu2:", mpu2.length, "lsm:", lsm.length);
+
         updateChart(chartMpu1, mpu1, noDataMpu1);
         updateChart(chartMpu2, mpu2, noDataMpu2);
         updateChart(chartLsm, lsm, noDataLsm);
 
-        // Actualizar stats y raw_data
-        updateSensorStats("mpu1", mpu1, mpu1LastValues, mpu1LastTime);
-        updateSensorStats("mpu2", mpu2, mpu2LastValues, mpu2LastTime);
-        updateSensorStats("lsm", lsm, lsmLastValues, lsmLastTime);
+        updateSensorStats(mpu1, mpu1LastValues, mpu1LastTime);
+        updateSensorStats(mpu2, mpu2LastValues, mpu2LastTime);
+        updateSensorStats(lsm, lsmLastValues, lsmLastTime);
 
         const lastItem = slice[slice.length - 1];
         if (lastItem && lastItem.raw_data) {
@@ -706,7 +700,7 @@
       noDataLabel.style.display = "none";
     }
 
-    function updateSensorStats(id, dataArray, valueLabel, timeLabel) {
+    function updateSensorStats(dataArray, valueLabel, timeLabel) {
       if (!dataArray || dataArray.length === 0) {
         valueLabel.textContent = "X: -- · Y: --";
         timeLabel.textContent = "Último dato: --:--:--";
@@ -725,7 +719,6 @@
       sessionCountLabel.textContent = "Total: 0 datos";
       sessionStartLabel.textContent = "Inicio: --:--:--";
 
-      // Primer fetch inmediato y luego cada intervalo
       fetchSensorData();
       setInterval(fetchSensorData, POLL_INTERVAL_MS);
     })();
