@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Monitor de Sensores – Tiempo Real</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --panel: #ffffff;
+      --accent: #0066ff;
+      --accent-soft: #e0ecff;
+      --text-main: #222;
+      --text-soft: #666;
+      --danger: #e53935;
+      --ok: #2e7d32;
+      --warning: #f9a825;
+      --border-soft: #dde3ec;
+      --shadow-soft: 0 2px 10px rgba(0,0,0,0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-main);
+    }
+
+    header {
+      background: #ffffff;
+      box-shadow: var(--shadow-soft);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .title-block {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .title-block h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .title-block span {
+      font-size: 0.85rem;
+      color: var(--text-soft);
+    }
+
+    .status-block {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      font-size: 0.85rem;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.8rem;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--warning);
+    }
+
+    .status-dot.ok {
+      background: var(--ok);
+    }
+
+    .status-dot.error {
+      background: var(--danger);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+      gap: 16px;
+      padding: 16px;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid var(--border-soft);
+    }
+
+    .panel h2 {
+      font-size: 1rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel h2 span {
+      font-size: 0.8rem;
+      color: var(--text-soft);
+      font-weight: 400;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .sensor-toggle-group {
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .sensor-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      color: var(--text-main);
+    }
+
+    .sensor-toggle input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+    }
+
+    .sensor-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .badge {
+      font-size: 0.8rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #f1f3f7;
+      color: var(--text-soft);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .stat-card {
+      background: #f7f9fc;
+      border-radius: 8px;
+      padding: 6px 8px;
+      border: 1px solid #e1e6f0;
+      font-size: 0.78rem;
+    }
+
+    .stat-label {
+      color: var(--text-soft);
+      margin-bottom: 2px;
+    }
+
+    .stat-value {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .stat-sub {
+      font-size: 0.7rem;
+      color: var(--text-soft);
+      margin-top: 2px;
+    }
+
+    .raw-wrapper {
+      margin-top: 12px;
+    }
+
+    .raw-wrapper label {
+      font-size: 0.8rem;
+      color: var(--text-soft);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .raw-area {
+      width: 100%;
+      min-height: 70px;
+      max-height: 120px;
+      resize: vertical;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #dde3ec;
+      font-size: 0.78rem;
+      font-family: monospace;
+      background: #fbfcff;
+      color: var(--text-main);
+    }
+
+    .raw-area:focus {
+      outline: 1px solid var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+    }
+
+    .small-text {
+      font-size: 0.75rem;
+      color: var(--text-soft);
+      margin-top: 6px;
+      line-height: 1.3;
+    }
+
+    .charts-container {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .chart-card {
+      background: var(--panel);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid var(--border-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .chart-header {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .chart-header h3 {
+      font-size: 0.95rem;
+    }
+
+    .chart-header span {
+      font-size: 0.78rem;
+      color: var(--text-soft);
+    }
+
+    canvas {
+      width: 100%;
+      max-height: 220px;
+    }
+
+    .no-data {
+      font-size: 0.8rem;
+      color: var(--text-soft);
+      margin-top: 3px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title-block">
+      <h1>Monitor de Sensores – Tiempo Real</h1>
+      <span>Fuente: Firebase Realtime Database · /sensor_data</span>
+    </div>
+    <div class="status-block">
+      <div class="status-pill" id="status-pill">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Desconectado</span>
+      </div>
+      <span id="last-update">Última actualización: --:--:--</span>
+      <span id="rate-info">Datos en sesión: 0 · 0.0 datos/min</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- PANEL LATERAL -->
+    <section class="panel">
+      <h2>
+        Control y estado
+        <span>Actualización cada 1 s</span>
+      </h2>
+
+      <div class="sensor-toggle-group">
+        <label class="sensor-toggle">
+          <input type="checkbox" id="chk-mpu1" checked />
+          <span>MPU9250 #1 (mpu9250_1)</span>
+        </label>
+        <label class="sensor-toggle">
+          <input type="checkbox" id="chk-mpu2" checked />
+          <span>MPU9250 #2 (mpu9250_2)</span>
+        </label>
+        <label class="sensor-toggle">
+          <input type="checkbox" id="chk-lsm" checked />
+          <span>LSM6DSOX (lsm6dsox)</span>
+        </label>
+      </div>
+
+      <div class="sensor-badges">
+        <span class="badge">Límite: últimos 500 puntos</span>
+        <span class="badge">Ruta: /sensor_data</span>
+      </div>
+
+      <!-- Stats por sensor -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">MPU9250 #1</div>
+          <div class="stat-value" id="mpu1-last-values">X: -- · Y: --</div>
+          <div class="stat-sub" id="mpu1-last-time">Último dato: --:--:--</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">MPU9250 #2</div>
+          <div class="stat-value" id="mpu2-last-values">X: -- · Y: --</div>
+          <div class="stat-sub" id="mpu2-last-time">Último dato: --:--:--</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">LSM6DSOX</div>
+          <div class="stat-value" id="lsm-last-values">X: -- · Y: --</div>
+          <div class="stat-sub" id="lsm-last-time">Último dato: --:--:--</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Sesión</div>
+          <div class="stat-value" id="session-count">Total: 0 datos</div>
+          <div class="stat-sub" id="session-start">Inicio: --:--:--</div>
+        </div>
+      </div>
+
+      <div class="raw-wrapper">
+        <label for="raw-area">Último raw_data recibido</label>
+        <textarea id="raw-area" class="raw-area" readonly>Sin datos aún…</textarea>
+      </div>
+
+      <p class="small-text">
+        La página consulta periódicamente a:<br>
+        <code>https://trio-de-aceleradores-default-rtdb.firebaseio.com/sensor_data.json?orderBy="$key"&amp;limitToLast=500</code>
+      </p>
+    </section>
+
+    <!-- CHARTS -->
+    <section class="charts-container">
+      <div class="chart-card" id="card-mpu1">
+        <div class="chart-header">
+          <h3>MPU9250 #1</h3>
+          <span>sensor_type = "mpu9250_1"</span>
+        </div>
+        <canvas id="chart-mpu1"></canvas>
+        <div class="no-data" id="nodata-mpu1">Sin datos todavía para este sensor.</div>
+      </div>
+
+      <div class="chart-card" id="card-mpu2">
+        <div class="chart-header">
+          <h3>MPU9250 #2</h3>
+          <span>sensor_type = "mpu9250_2"</span>
+        </div>
+        <canvas id="chart-mpu2"></canvas>
+        <div class="no-data" id="nodata-mpu2">Sin datos todavía para este sensor.</div>
+      </div>
+
+      <div class="chart-card" id="card-lsm">
+        <div class="chart-header">
+          <h3>LSM6DSOX</h3>
+          <span>sensor_type = "lsm6dsox"</span>
+        </div>
+        <canvas id="chart-lsm"></canvas>
+        <div class="no-data" id="nodata-lsm">Sin datos todavía para este sensor.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ================= CONFIGURACIÓN =================
+    const BASE_URL = "https://trio-de-aceleradores-default-rtdb.firebaseio.com";
+    const SENSOR_URL = BASE_URL + "/sensor_data.json?orderBy=%22$key%22&limitToLast=500";
+    const POLL_INTERVAL_MS = 1000; // 1 segundo
+
+    // ================= ESTADO DE SESIÓN =================
+    let sessionStartTime = null;
+    let totalPointsThisSession = 0;
+
+    let lastFetchTime = null;
+
+    // ================= REFERENCIAS DOM =================
+    const statusDot = document.getElementById("status-dot");
+    const statusText = document.getElementById("status-text");
+    const lastUpdateLabel = document.getElementById("last-update");
+    const rateInfoLabel = document.getElementById("rate-info");
+
+    const mpu1LastValues = document.getElementById("mpu1-last-values");
+    const mpu1LastTime = document.getElementById("mpu1-last-time");
+    const mpu2LastValues = document.getElementById("mpu2-last-values");
+    const mpu2LastTime = document.getElementById("mpu2-last-time");
+    const lsmLastValues = document.getElementById("lsm-last-values");
+    const lsmLastTime = document.getElementById("lsm-last-time");
+    const sessionCountLabel = document.getElementById("session-count");
+    const sessionStartLabel = document.getElementById("session-start");
+    const rawArea = document.getElementById("raw-area");
+
+    const chkMpu1 = document.getElementById("chk-mpu1");
+    const chkMpu2 = document.getElementById("chk-mpu2");
+    const chkLsm = document.getElementById("chk-lsm");
+
+    const cardMpu1 = document.getElementById("card-mpu1");
+    const cardMpu2 = document.getElementById("card-mpu2");
+    const cardLsm = document.getElementById("card-lsm");
+
+    const noDataMpu1 = document.getElementById("nodata-mpu1");
+    const noDataMpu2 = document.getElementById("nodata-mpu2");
+    const noDataLsm = document.getElementById("nodata-lsm");
+
+    // ================= UTILIDADES =================
+    function formatTime(date) {
+      if (!date) return "--:--:--";
+      return date.toLocaleTimeString("es-MX", { hour12: false });
+    }
+
+    function updateStatus(state) {
+      // state: "connecting" | "ok" | "error"
+      if (state === "connecting") {
+        statusDot.classList.remove("ok", "error");
+        statusText.textContent = "Conectando…";
+      } else if (state === "ok") {
+        statusDot.classList.add("ok");
+        statusDot.classList.remove("error");
+        statusText.textContent = "Conectado";
+      } else if (state === "error") {
+        statusDot.classList.add("error");
+        statusDot.classList.remove("ok");
+        statusText.textContent = "Error de conexión";
+      }
+    }
+
+    function updateSessionStats(newCount) {
+      const now = new Date();
+      if (!sessionStartTime) {
+        sessionStartTime = now;
+        sessionStartLabel.textContent = "Inicio: " + formatTime(sessionStartTime);
+      }
+      totalPointsThisSession += newCount;
+      sessionCountLabel.textContent = "Total: " + totalPointsThisSession + " datos";
+
+      const minutes = (now - sessionStartTime) / 60000;
+      const rate = minutes > 0 ? (totalPointsThisSession / minutes) : 0;
+      rateInfoLabel.textContent =
+        "Datos en sesión: " +
+        totalPointsThisSession +
+        " · " +
+        rate.toFixed(1) +
+        " datos/min";
+    }
+
+    // ================= CONFIGURAR GRÁFICAS =================
+    function createSensorChart(ctx, title) {
+      return new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "X (g)",
+              data: [],
+              borderColor: "rgba(255, 99, 132, 1)",
+              backgroundColor: "rgba(255, 99, 132, 0.1)",
+              pointRadius: 0,
+              borderWidth: 1.5,
+              tension: 0.15
+            },
+            {
+              label: "Y (g)",
+              data: [],
+              borderColor: "rgba(54, 162, 235, 1)",
+              backgroundColor: "rgba(54, 162, 235, 0.1)",
+              pointRadius: 0,
+              borderWidth: 1.5,
+              tension: 0.15
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: "index",
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: true,
+              labels: {
+                boxWidth: 12,
+                boxHeight: 12
+              }
+            },
+            title: {
+              display: false,
+              text: title
+            },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  if (!items.length) return "";
+                  return items[0].label;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: "time",
+              time: {
+                unit: "second",
+                displayFormats: {
+                  second: "HH:mm:ss"
+                }
+              },
+              ticks: {
+                maxRotation: 0,
+                autoSkip: true,
+                font: {
+                  size: 10
+                }
+              }
+            },
+            y: {
+              ticks: {
+                font: {
+                  size: 10
+                }
+              },
+              title: {
+                display: true,
+                text: "Aceleración (g)"
+              }
+            }
+          },
+          animation: {
+            duration: 0
+          }
+        }
+      });
+    }
+
+    const ctxMpu1 = document.getElementById("chart-mpu1").getContext("2d");
+    const ctxMpu2 = document.getElementById("chart-mpu2").getContext("2d");
+    const ctxLsm = document.getElementById("chart-lsm").getContext("2d");
+
+    const chartMpu1 = createSensorChart(ctxMpu1, "MPU9250 #1");
+    const chartMpu2 = createSensorChart(ctxMpu2, "MPU9250 #2");
+    const chartLsm = createSensorChart(ctxLsm, "LSM6DSOX");
+
+    // Ocultar/mostrar por checkbox (ocultamos el card completo)
+    function handleCheckboxVisibility() {
+      cardMpu1.classList.toggle("hidden", !chkMpu1.checked);
+      cardMpu2.classList.toggle("hidden", !chkMpu2.checked);
+      cardLsm.classList.toggle("hidden", !chkLsm.checked);
+    }
+
+    chkMpu1.addEventListener("change", handleCheckboxVisibility);
+    chkMpu2.addEventListener("change", handleCheckboxVisibility);
+    chkLsm.addEventListener("change", handleCheckboxVisibility);
+    handleCheckboxVisibility();
+
+    // ================= LÓGICA DE FETCH Y ACTUALIZACIÓN =================
+    async function fetchSensorData() {
+      try {
+        updateStatus("connecting");
+        const response = await fetch(SENSOR_URL, { cache: "no-store" });
+
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+
+        const json = await response.json() || {};
+        updateStatus("ok");
+
+        const now = new Date();
+        lastFetchTime = now;
+        lastUpdateLabel.textContent = "Última actualización: " + formatTime(now);
+
+        // Transformar en arreglo y ordenar por timestamp si existe
+        const entries = Object.entries(json);
+        const dataArray = entries.map(([key, value]) => ({
+          key,
+          ...value
+        }));
+
+        // ordenar por timestamp si existe, sino por key
+        dataArray.sort((a, b) => {
+          const ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+          const tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+          if (ta && tb && !isNaN(ta) && !isNaN(tb)) {
+            return ta - tb;
+          }
+          // fallback
+          if (a.key < b.key) return -1;
+          if (a.key > b.key) return 1;
+          return 0;
+        });
+
+        const limit = 500;
+        const slice = dataArray.slice(-limit);
+
+        // Agrupar por sensor_type
+        const mpu1 = [];
+        const mpu2 = [];
+        const lsm = [];
+
+        slice.forEach((item) => {
+          const t = item.timestamp ? new Date(item.timestamp) : new Date();
+          const x = typeof item.x_value === "number" ? item.x_value : parseFloat(item.x_value);
+          const y = typeof item.y_value === "number" ? item.y_value : parseFloat(item.y_value);
+
+          if (!isFinite(x) || !isFinite(y)) return;
+
+          const base = { time: t, x, y, raw_data: item.raw_data || "", sensor_type: item.sensor_type || "" };
+
+          if (item.sensor_type === "mpu9250_1") {
+            mpu1.push(base);
+          } else if (item.sensor_type === "mpu9250_2") {
+            mpu2.push(base);
+          } else if (item.sensor_type === "lsm6dsox") {
+            lsm.push(base);
+          }
+        });
+
+        // Actualizar gráficas
+        updateChart(chartMpu1, mpu1, noDataMpu1);
+        updateChart(chartMpu2, mpu2, noDataMpu2);
+        updateChart(chartLsm, lsm, noDataLsm);
+
+        // Actualizar stats y raw_data
+        updateSensorStats("mpu1", mpu1, mpu1LastValues, mpu1LastTime);
+        updateSensorStats("mpu2", mpu2, mpu2LastValues, mpu2LastTime);
+        updateSensorStats("lsm", lsm, lsmLastValues, lsmLastTime);
+
+        const lastItem = slice[slice.length - 1];
+        if (lastItem && lastItem.raw_data) {
+          rawArea.value = lastItem.raw_data;
+        }
+
+        updateSessionStats(slice.length);
+
+      } catch (err) {
+        console.error("Error al obtener datos:", err);
+        updateStatus("error");
+      }
+    }
+
+    function updateChart(chart, dataArray, noDataLabel) {
+      if (!dataArray || dataArray.length === 0) {
+        chart.data.labels = [];
+        chart.data.datasets[0].data = [];
+        chart.data.datasets[1].data = [];
+        chart.update("none");
+        noDataLabel.textContent = "Sin datos todavía para este sensor.";
+        noDataLabel.style.display = "block";
+        return;
+      }
+
+      const labels = dataArray.map((d) => d.time);
+      const dataX = dataArray.map((d) => d.x);
+      const dataY = dataArray.map((d) => d.y);
+
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = dataX;
+      chart.data.datasets[1].data = dataY;
+      chart.update("none");
+
+      noDataLabel.style.display = "none";
+    }
+
+    function updateSensorStats(id, dataArray, valueLabel, timeLabel) {
+      if (!dataArray || dataArray.length === 0) {
+        valueLabel.textContent = "X: -- · Y: --";
+        timeLabel.textContent = "Último dato: --:--:--";
+        return;
+      }
+      const last = dataArray[dataArray.length - 1];
+      valueLabel.textContent = "X: " + last.x.toFixed(3) + " · Y: " + last.y.toFixed(3);
+      timeLabel.textContent = "Último dato: " + formatTime(last.time);
+    }
+
+    // ================= INICIO =================
+    (function init() {
+      sessionStartTime = null;
+      totalPointsThisSession = 0;
+      updateStatus("connecting");
+      sessionCountLabel.textContent = "Total: 0 datos";
+      sessionStartLabel.textContent = "Inicio: --:--:--";
+
+      // Primer fetch inmediato y luego cada intervalo
+      fetchSensorData();
+      setInterval(fetchSensorData, POLL_INTERVAL_MS);
+    })();
+  </script>
+</body>
+</html>
